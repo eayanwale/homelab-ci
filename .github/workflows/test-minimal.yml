@@ -1,0 +1,10 @@
+name: test-minimal
+
+on:
+  workflow_call:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "hello from the reusable workflow"
