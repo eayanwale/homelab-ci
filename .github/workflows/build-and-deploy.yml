@@ -36,9 +36,13 @@ on:
         description: "A deploy token scoped to this one instance (create one on the instance's Deploy tab)"
         required: true
 
-permissions:
-  contents: read
-  packages: write
+# Deliberately no top-level `permissions:` block here -- confirmed
+# live that GitHub rejects a cross-repository workflow_call with
+# startup_failure when the REUSABLE workflow declares one, even though
+# the same values on the CALLER work fine and flow down correctly.
+# Callers need `permissions: contents: read, packages: write` in
+# their own caller workflow (see README.md's example) for the GHCR
+# push to work.
 
 jobs:
   build-and-deploy:

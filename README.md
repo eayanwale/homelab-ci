@@ -19,6 +19,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   deploy:
     uses: eayanwale/homelab-ci/.github/workflows/build-and-deploy.yml@main
@@ -30,6 +34,14 @@ jobs:
 ```
 
 That's it -- push to `main` and it builds, pushes, and deploys.
+
+**The `permissions:` block in your caller workflow isn't optional** --
+without `packages: write`, the push to `ghcr.io` fails. It has to live
+in *your* workflow, not this one: confirmed live that GitHub rejects a
+cross-repo `workflow_call` outright (`startup_failure`, before any job
+even starts) if the reusable workflow itself declares a top-level
+`permissions:` block, even though the identical values on the caller
+work fine and flow down correctly. Copy the example above as-is.
 
 ## Inputs
 
