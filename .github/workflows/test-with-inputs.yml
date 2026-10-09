@@ -1,0 +1,43 @@
+name: test-with-inputs
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Full image reference to build and push, e.g. ghcr.io/eayanwale/my-app"
+        required: true
+        type: string
+      instance_id:
+        description: "The homelab-broker instance id to deploy to (shown on the instance's detail page)"
+        required: true
+        type: string
+      dockerfile:
+        description: "Path to the Dockerfile to build"
+        required: false
+        type: string
+        default: Dockerfile
+      context:
+        description: "Build context"
+        required: false
+        type: string
+        default: .
+      platforms:
+        description: "Comma-separated platforms to build for"
+        required: false
+        type: string
+        default: linux/amd64,linux/arm64
+      broker_url:
+        description: "Base URL of the homelab-broker instance to deploy to"
+        required: false
+        type: string
+        default: https://lab.knoch.dev
+    secrets:
+      BROKER_DEPLOY_TOKEN:
+        description: "A deploy token scoped to this one instance (create one on the instance's Deploy tab)"
+        required: true
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "image=${{ inputs.image }} instance_id=${{ inputs.instance_id }}"
