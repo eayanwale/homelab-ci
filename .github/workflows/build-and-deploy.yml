@@ -31,10 +31,29 @@ on:
         required: false
         type: string
         default: https://lab.knoch.dev
+      broker_tailscale_url:
+        description: >
+          If set (together with the TS_OAUTH_* secrets), reach the
+          broker directly over Tailscale at this URL instead of
+          broker_url -- works around a confirmed-live issue where some
+          CI runners' requests get corrupted somewhere inside the
+          Cloudflare Tunnel path specifically (not a bug in this
+          workflow or in the broker itself -- a clean request was
+          independently verified on both ends via a byte-level trace).
+          e.g. http://100.119.250.100:8000
+        required: false
+        type: string
+        default: ""
     secrets:
       BROKER_DEPLOY_TOKEN:
         description: "A deploy token scoped to this one instance (create one on the instance's Deploy tab)"
         required: true
+      TS_OAUTH_CLIENT_ID:
+        description: "Tailscale OAuth client id, tagged to reach the broker's tailnet address -- only needed with broker_tailscale_url set"
+        required: false
+      TS_OAUTH_SECRET:
+        description: "Tailscale OAuth client secret -- only needed with broker_tailscale_url set"
+        required: false
 
 # Deliberately no top-level `permissions:` block here -- confirmed
 # live that GitHub rejects a cross-repository workflow_call with
@@ -71,32 +90,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Connect to Tailscale
+        if: ${{ inputs.broker_tailscale_url != '' }}
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:app-deploy
+
       - name: Deploy through homelab-broker
         env:
           BROKER_DEPLOY_TOKEN: ${{ secrets.BROKER_DEPLOY_TOKEN }}
-          BROKER_URL: ${{ inputs.broker_url }}
+          BROKER_URL: ${{ inputs.broker_tailscale_url != '' && inputs.broker_tailscale_url || inputs.broker_url }}
           INSTANCE_ID: ${{ inputs.instance_id }}
           IMAGE: ${{ inputs.image }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
-          # A byte-level trace (curl -v / --trace-ascii) confirmed curl
-          # always sends a perfectly clean, correctly-framed request --
-          # the corruption happens between the Cloudflare edge and the
-          # origin, inside the tunnel itself, and isn't consistent
-          # (one failure showed the request's own header block
-          # duplicated into the body; another showed the origin
-          # receiving no body at all). That inconsistency across
-          # otherwise-identical requests is the signature of a
-          # connection-reuse/multiplexing desync in cloudflared's own
-          # pooled connections to the origin under concurrent traffic,
-          # not something fixable in this script's request shape.
-          # Mitigated two ways: "Connection: close" stops this
-          # specific request from being pooled for reuse by anything
-          # else, and a few retries ride out the cases where the
-          # desync happens anyway (a fresh connection on retry avoids
-          # whatever pooled connection was involved in the failure).
+          # Confirmed live: some CI runners' requests over the public
+          # Cloudflare-tunneled URL get corrupted somewhere inside the
+          # tunnel path itself (a byte-level trace showed curl sending
+          # a clean request and the broker receiving a mangled one,
+          # inconsistently across otherwise-identical attempts) --
+          # broker_tailscale_url (above) sidesteps that path entirely
+          # for callers that configure it. "Connection: close" plus a
+          # few retries is kept here regardless as a cheap defensive
+          # measure for callers still on the public URL path.
           response=""
           http_code=""
           for attempt in 1 2 3; do
