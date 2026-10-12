@@ -81,21 +81,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # --http1.1: confirmed live that curl's HTTP/2 request (the
-          # default whenever the server's TLS endpoint advertises h2,
-          # which Cloudflare's edge does) arrives at the broker with
-          # its own header block duplicated into the JSON body --
-          # an HTTP/2-to-HTTP/1.1 downgrade bug somewhere in the
-          # Cloudflare Tunnel path, since the origin (uvicorn) only
-          # ever speaks HTTP/1.1. Verified: curl's own outgoing request
-          # (via -v) is clean on the wire either way: the corruption
-          # happens in transit, specifically on the h2 path. Forcing
-          # HTTP/1.1 end-to-end from curl avoids it entirely.
+          # TEMPORARY: --trace-ascii dumps the full byte-level
+          # send/receive trace (headers AND body, both directions) to
+          # a file, to diagnose a live 422 whose response body shows
+          # literal "Content-Type:.../Content-Length:..." text landing
+          # INSIDE the JSON body the broker parses -- -v alone only
+          # showed curl's own clean, correctly-framed outgoing headers,
+          # and forcing --http1.1 (client-to-edge only; Cloudflare
+          # re-originates its own connection through the tunnel to the
+          # origin regardless) did not fix it. GitHub auto-redacts the
+          # registered secret value even in this trace.
           response=$(curl -sS --http1.1 -w '\n%{http_code}' -X POST \
             "$BROKER_URL/api/instances/$INSTANCE_ID/deploy" \
             -H "Authorization: Bearer $BROKER_DEPLOY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"image\": \"$IMAGE\", \"tag\": \"$SHA\"}")
+            -d "{\"image\": \"$IMAGE\", \"tag\": \"$SHA\"}" \
+            --trace-ascii /tmp/curl_trace.log)
+          echo "::group::curl trace"
+          cat /tmp/curl_trace.log
+          echo "::endgroup::"
 
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
