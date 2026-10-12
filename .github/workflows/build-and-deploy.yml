@@ -8,9 +8,20 @@ on:
         required: true
         type: string
       instance_id:
-        description: "The homelab-broker instance id to deploy to (shown on the instance's detail page)"
-        required: true
+        description: "The homelab-broker instance id to deploy to (shown on the instance's detail page) -- not needed when skip_deploy is set"
+        required: false
         type: string
+        default: ""
+      skip_deploy:
+        description: "Build and push the image, but don't deploy it anywhere -- for an image-build pipeline that isn't tied to an instance (e.g. a shared base image several deploy pipelines build on)."
+        required: false
+        type: boolean
+        default: false
+      scan_enabled:
+        description: "Scan the built image for known CVEs with Trivy and upload results to this repo's Code Scanning tab. Needs security-events: write in the CALLING workflow's own permissions (the reusable workflow itself can't declare permissions -- see the note below)."
+        required: false
+        type: boolean
+        default: false
       dockerfile:
         description: "Path to the Dockerfile to build"
         required: false
@@ -46,8 +57,8 @@ on:
         default: ""
     secrets:
       BROKER_DEPLOY_TOKEN:
-        description: "A deploy token scoped to this one instance (create one on the instance's Deploy tab)"
-        required: true
+        description: "A deploy token scoped to this one instance (create one on the instance's Deploy tab) -- not needed when skip_deploy is set"
+        required: false
       TS_OAUTH_CLIENT_ID:
         description: "Tailscale OAuth client id, tagged to reach the broker's tailnet address -- only needed with broker_tailscale_url set"
         required: false
@@ -90,8 +101,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Scan image for vulnerabilities
+        if: ${{ inputs.scan_enabled }}
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ inputs.image }}:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload scan results to GitHub Code Scanning
+        if: ${{ inputs.scan_enabled }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
       - name: Connect to Tailscale
-        if: ${{ inputs.broker_tailscale_url != '' }}
+        if: ${{ !inputs.skip_deploy && inputs.broker_tailscale_url != '' }}
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -99,6 +125,7 @@ jobs:
           tags: tag:app-deploy
 
       - name: Deploy through homelab-broker
+        if: ${{ !inputs.skip_deploy }}
         env:
           BROKER_DEPLOY_TOKEN: ${{ secrets.BROKER_DEPLOY_TOKEN }}
           BROKER_URL: ${{ inputs.broker_tailscale_url != '' && inputs.broker_tailscale_url || inputs.broker_url }}
