@@ -81,11 +81,19 @@ jobs:
         run: |
           set -euo pipefail
 
+          # TEMPORARY: -v (to stderr, visible in the job log, not
+          # captured into $response) dumps the exact bytes curl sends,
+          # to diagnose a live 422 whose body shows literal
+          # "Content-Type:.../Content-Length:..." text landing INSIDE
+          # the JSON body -- GitHub auto-redacts the registered secret
+          # value even in verbose output, so this is safe to run.
           response=$(curl -sS -w '\n%{http_code}' -X POST \
             "$BROKER_URL/api/instances/$INSTANCE_ID/deploy" \
             -H "Authorization: Bearer $BROKER_DEPLOY_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"image\": \"$IMAGE\", \"tag\": \"$SHA\"}")
+            -d "{\"image\": \"$IMAGE\", \"tag\": \"$SHA\"}" \
+            -v 2>/tmp/curl_verbose.log)
+          cat /tmp/curl_verbose.log >&2
 
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
