@@ -117,19 +117,6 @@ jobs:
           # for callers that configure it. "Connection: close" plus a
           # few retries is kept here regardless as a cheap defensive
           # measure for callers still on the public URL path.
-          # TEMP diagnostic: byte-level trace of one request over the
-          # Tailscale path, to see exactly what this runner sends/receives
-          # (removed once the investigation is done).
-          curl -sS --trace-ascii /tmp/ts-trace.txt -X POST \
-            -H "Connection: close" \
-            "$BROKER_URL/api/instances/$INSTANCE_ID/deploy" \
-            -H "Authorization: Bearer $BROKER_DEPLOY_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"image\": \"$IMAGE\", \"tag\": \"$SHA\"}" || true
-          echo "::group::Tailscale path byte trace"
-          cat /tmp/ts-trace.txt || true
-          echo "::endgroup::"
-
           response=""
           http_code=""
           for attempt in 1 2 3; do
