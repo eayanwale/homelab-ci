@@ -103,7 +103,7 @@ jobs:
 
       - name: Scan image for vulnerabilities
         if: ${{ inputs.scan_enabled }}
-        uses: aquasecurity/trivy-action@v0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
@@ -111,6 +111,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
+          trivy-version: v0.75.0
 
       - name: Upload scan results to GitHub Code Scanning
         if: ${{ inputs.scan_enabled }}
